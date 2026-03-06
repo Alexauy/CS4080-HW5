@@ -52,11 +52,23 @@ public class Lox {
     for (;;) { // [repl]
       System.out.print("> ");
       String line = reader.readLine();
-      if (line == null) break;
-      run(line);
-//> reset-had-error
-      hadError = false;
-//< reset-had-error
+      if(line == null) break;
+
+      Scanner scanner = new Scanner(line);
+      List<Token> tokens = scanner.scanTokens();
+
+      Parser parser = new Parser(tokens);
+      List<Stmt> statements = parser.parse();
+
+      if(statements.size() == 1 && statements.get(0) instanceof Stmt.Expression) {
+          Expr expr = ((Stmt.Expression) statements.get(0)).expression;
+          String result = interpreter.interpret(expr);
+          if (result != null) {
+              System.out.println("= " + result);
+          }
+      }else{
+          interpreter.interpret(statements);
+      }
     }
   }
 //< prompt

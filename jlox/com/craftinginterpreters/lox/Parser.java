@@ -12,12 +12,15 @@ import java.util.List;
 import static com.craftinginterpreters.lox.TokenType.*;
 
 class Parser {
-//> parse-error
-  private static class ParseError extends RuntimeException {}
+    //> parse-error
+    private static class ParseError extends RuntimeException {
+    }
 
-//< parse-error
-  private final List<Token> tokens;
-  private int current = 0;
+    //< parse-error
+    private final List<Token> tokens;
+    private int current = 0;
+
+    private int loopDepth = 0;
 
   Parser(List<Token> tokens) {
     this.tokens = tokens;
@@ -121,6 +124,7 @@ class Parser {
 //> parse-block
     if (match(LEFT_BRACE)) return new Stmt.Block(block());
 //< parse-block
+    if(match(BREAK)) return breakStatement();
 
     return expressionStatement();
   }
@@ -159,29 +163,35 @@ class Parser {
     consume(RIGHT_PAREN, "Expect ')' after for clauses.");
 //< for-increment
 //> for-body
-    Stmt body = statement();
+    try{
+        loopDepth++;
+        Stmt body = statement();
 
 //> for-desugar-increment
-    if (increment != null) {
-      body = new Stmt.Block(
-          Arrays.asList(
-              body,
-              new Stmt.Expression(increment)));
-    }
+        if (increment != null) {
+            body = new Stmt.Block(
+                    Arrays.asList(
+                            body,
+                            new Stmt.Expression(increment)));
+        }
 
 //< for-desugar-increment
 //> for-desugar-condition
-    if (condition == null) condition = new Expr.Literal(true);
-    body = new Stmt.While(condition, body);
+        if (condition == null) condition = new Expr.Literal(true);
+        body = new Stmt.While(condition, body);
 
 //< for-desugar-condition
 //> for-desugar-initializer
-    if (initializer != null) {
-      body = new Stmt.Block(Arrays.asList(initializer, body));
-    }
+        if (initializer != null) {
+            body = new Stmt.Block(Arrays.asList(initializer, body));
+        }
 
 //< for-desugar-initializer
-    return body;
+        return body;
+//< for-body
+    }finally{
+        loopDepth--;
+    }
 //< for-body
   }
 //< Control Flow for-statement
@@ -237,15 +247,25 @@ class Parser {
     consume(LEFT_PAREN, "Expect '(' after 'while'.");
     Expr condition = expression();
     consume(RIGHT_PAREN, "Expect ')' after condition.");
-    Stmt body = statement();
 
-    return new Stmt.While(condition, body);
+    try{
+        loopDepth++;
+        Stmt body = statement();
+
+        return new Stmt.While(condition, body);
+    }finally{
+        loopDepth--;
+    }
   }
 //< Control Flow while-statement
 //> Statements and State parse-expression-statement
   private Stmt expressionStatement() {
     Expr expr = expression();
-    consume(SEMICOLON, "Expect ';' after expression.");
+
+    if(!isAtEnd()){
+        consume(SEMICOLON, "Expect ';' after expression.");
+    }
+
     return new Stmt.Expression(expr);
   }
 //< Statements and State parse-expression-statement
@@ -271,10 +291,20 @@ class Parser {
 
     consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
     List<Stmt> body = block();
-    return new Stmt.Function(name, parameters, body);
+    Expr.Function function = new Expr.Function(parameters, body);
+    return new Stmt.Function(name, function);
 //< parse-body
   }
 //< Functions parse-function
+
+    private Stmt breakStatement(){
+      if(loopDepth == 0){
+          error(previous(), "Must be inside a loop to use a 'break'.");
+      }
+
+      consume(SEMICOLON, "Expect ';' after 'break'.");
+      return new Stmt.Break();
+    }
 //> Statements and State block
   private List<Stmt> block() {
     List<Stmt> statements = new ArrayList<>();
@@ -316,6 +346,28 @@ class Parser {
     return expr;
   }
 //< Statements and State parse-assignment
+
+    private Expr.Function functionExpression(){
+      consume(LEFT_PAREN, "Expect '(' after 'fun'.");
+      List<Token> parameters = new ArrayList<>();
+
+      if(!check(RIGHT_PAREN)){
+          do{
+              if(parameters.size() >= 255){
+                  error(peek(), "You cannot have more than 255 parameters.");
+              }
+
+              parameters.add(consume(IDENTIFIER, "Expect param name."));
+          }while(match(COMMA));
+      }
+
+      consume(RIGHT_PAREN, "Expect ')' after params.");
+      consume(LEFT_BRACE, "Expect '{' before function body.");
+      List<Stmt> body = block();
+
+      return new Expr.Function(parameters, body);
+    }
+
 //> Control Flow or
   private Expr or() {
     Expr expr = and();
@@ -456,6 +508,7 @@ class Parser {
     if (match(FALSE)) return new Expr.Literal(false);
     if (match(TRUE)) return new Expr.Literal(true);
     if (match(NIL)) return new Expr.Literal(null);
+    if(match(FUN)) return functionExpression();
 
     if (match(NUMBER, STRING)) {
       return new Expr.Literal(previous().literal);
@@ -513,7 +566,6 @@ class Parser {
 //< consume
 //> check
   private boolean check(TokenType type) {
-    if (isAtEnd()) return false;
     return peek().type == type;
   }
 //< check

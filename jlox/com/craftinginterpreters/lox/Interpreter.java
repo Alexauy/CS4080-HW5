@@ -62,6 +62,7 @@ class Interpreter implements Expr.Visitor<Object>,
     }
   }
 */
+  private static class BreakException extends RuntimeException{}
 //> Statements and State interpret
   void interpret(List<Stmt> statements) {
     try {
@@ -140,7 +141,7 @@ class Interpreter implements Expr.Visitor<Object>,
       LoxFunction function = new LoxFunction(method, environment);
 */
 //> interpreter-method-initializer
-      LoxFunction function = new LoxFunction(method, environment,
+      LoxFunction function = new LoxFunction(method.name.lexeme, method.function, environment,
           method.name.lexeme.equals("init"));
 //< interpreter-method-initializer
       methods.put(method.name.lexeme, function);
@@ -185,7 +186,7 @@ class Interpreter implements Expr.Visitor<Object>,
     LoxFunction function = new LoxFunction(stmt, environment);
 */
 //> Classes construct-function
-    LoxFunction function = new LoxFunction(stmt, environment,
+    LoxFunction function = new LoxFunction(stmt.name.lexeme, stmt.function, environment,
                                            false);
 //< Classes construct-function
     environment.define(stmt.name.lexeme, function);
@@ -221,9 +222,11 @@ class Interpreter implements Expr.Visitor<Object>,
   }
 //< Functions visit-return
 //> Statements and State visit-var
+private static Object uninitialized = new Object();
+
   @Override
   public Void visitVarStmt(Stmt.Var stmt) {
-    Object value = null;
+    Object value = uninitialized;
     if (stmt.initializer != null) {
       value = evaluate(stmt.initializer);
     }
@@ -235,8 +238,11 @@ class Interpreter implements Expr.Visitor<Object>,
 //> Control Flow visit-while
   @Override
   public Void visitWhileStmt(Stmt.While stmt) {
-    while (isTruthy(evaluate(stmt.condition))) {
-      execute(stmt.body);
+    try{
+        while (isTruthy(evaluate(stmt.condition))) {
+            execute(stmt.body);
+        }
+    }catch(BreakException ex){
     }
     return null;
   }
@@ -261,6 +267,11 @@ class Interpreter implements Expr.Visitor<Object>,
     return value;
   }
 //< Statements and State visit-assign
+    @Override
+    public Object visitFunctionExpr(Expr.Function expr){
+      return new LoxFunction(null, expr, environment, false);
+    }
+
 //> visit-binary
   @Override
   public Object visitBinaryExpr(Expr.Binary expr) {
@@ -474,10 +485,19 @@ class Interpreter implements Expr.Visitor<Object>,
 /* Statements and State visit-variable < Resolving and Binding call-look-up-variable
     return environment.get(expr.name);
 */
-//> Resolving and Binding call-look-up-variable
-    return lookUpVariable(expr.name, expr);
-//< Resolving and Binding call-look-up-variable
+    Object value = environment.get(expr.name);
+    if(value==uninitialized){
+        throw new RuntimeError(expr.name,
+                "Variable must be initialized before use.");
+    }
+    return value;
   }
+
+  @Override
+  public Void visitBreakStmt(Stmt.Break stmt){
+      throw new BreakException();
+  }
+
 //> Resolving and Binding look-up-variable
   private Object lookUpVariable(Token name, Expr expr) {
     Integer distance = locals.get(expr);
@@ -533,4 +553,14 @@ class Interpreter implements Expr.Visitor<Object>,
     return object.toString();
   }
 //< stringify
+
+    String interpret(Expr expression){
+      try{
+          Object value = evaluate(expression);
+          return stringify(value);
+      }catch(RuntimeError error){
+          Lox.runtimeError(error);
+          return null;
+      }
+    }
 }

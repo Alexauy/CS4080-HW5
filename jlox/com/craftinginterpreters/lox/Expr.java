@@ -17,6 +17,7 @@ abstract class Expr {
     R visitThisExpr(This expr);
     R visitUnaryExpr(Unary expr);
     R visitVariableExpr(Variable expr);
+    R visitFunctionExpr(Function expr);
   }
 
   // Nested Expr classes here...
@@ -36,6 +37,21 @@ abstract class Expr {
     final Expr value;
   }
 //< expr-assign
+
+    static class Function extends Expr{
+      final List<Token> params;
+      final List<Stmt> body;
+
+      Function(List<Token> params, List<Stmt> body){
+          this.params = params;
+          this.body = body;
+      }
+
+      @Override
+      <R> R accept(Visitor<R> visitor){
+          return visitor.visitFunctionExpr(this);
+      }
+    }
 //> expr-binary
   static class Binary extends Expr {
     Binary(Expr left, Token operator, Expr right) {
