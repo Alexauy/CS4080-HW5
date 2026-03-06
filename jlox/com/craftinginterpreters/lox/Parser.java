@@ -66,7 +66,10 @@ class Parser {
       if (match(CLASS)) return classDeclaration();
 //< Classes match-class
 //> Functions match-fun
-      if (match(FUN)) return function("function");
+      if (check(FUN) && checkNext(IDENTIFIER)){
+          consume(FUN, null);
+          return function("function");
+      }
 //< Functions match-fun
       if (match(VAR)) return varDeclaration();
 
@@ -557,6 +560,13 @@ class Parser {
     return false;
   }
 //< match
+
+  private boolean checkNext(TokenType tokenType){
+      if(isAtEnd()) return false;
+      if(tokens.get(current + 1).type == EOF) return false;
+      return tokens.get(current + 1).type == tokenType;
+  }
+
 //> consume
   private Token consume(TokenType type, String message) {
     if (check(type)) return advance();
