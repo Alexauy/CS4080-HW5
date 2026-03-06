@@ -1,2 +1,10 @@
-fun () { print "this will not be seen since there is no call"; };
-(fun() { print "this is going to be called right...now"; })();
+var unused = 123;
+
+var used = 23;
+print used;
+
+fun test(unusedT, usedT){
+print usedT;
+}
+
+test(1, 2);
